@@ -58,7 +58,7 @@ admin_pw = st.sidebar.text_input("접속 암호", type="password")
 
 if admin_pw == "1234":
     st.sidebar.success("✅ 인증 완료")
-    target_date = st.sidebar.date_input("조회 날짜", datetime.now())
+    target_date = st.sidebar.date_input("조회 날짜", value="today")
     t_str = target_date.strftime("%Y%m%d")
     
     # 1단계: 업로드 폴더에서 해당 날짜 파일 필터링
@@ -113,7 +113,7 @@ with st.container():
     c1, c2 = st.columns(2)
     with c1: driver = st.text_input("👤 기사님 성함", placeholder="성함 입력")
     with c2: car = st.text_input("🚛 차량 번호", placeholder="예: 12가 3456")
-    rep_date = st.date_input("📅 작업 날짜", datetime.now())
+    rep_date = st.date_input("📅 작업 날짜", value="today")
 
 st.divider()
 
