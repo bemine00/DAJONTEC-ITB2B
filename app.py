@@ -70,8 +70,12 @@ if admin_pw == "1234":
         if t_str in f or mtime == t_str:
             sel_f.append(f)
     
+    # 모든 파일 목록을 그냥 다 보여주기
+    all_files_in_folder = os.listdir(SAVE_DIR)
+    st.sidebar.write(f"현재 서버에 있는 전체 파일: {all_files_in_folder}")
+    
     if sel_f:
-        st.sidebar.info(f"📂 현재 처리할 데이터: {len(sel_f)}건")
+        st.sidebar.info(f"📂 미처리 데이터: {len(sel_f)}건")
         
         # 압축 파일 생성
         buf = io.BytesIO()
