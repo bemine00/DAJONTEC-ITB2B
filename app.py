@@ -62,7 +62,7 @@ st.markdown("""
 # 3. 사이드바 - 관리자 메뉴 (중복 방지 & 완료 처리 로직)
 st.sidebar.title("🔐 관리자 모드")
 admin_pw = st.sidebar.text_input("접속 암호", type="password")
-if admin_pw == "1234"
+if admin_pw == "1234":
     st.sidebar.success("✅ 인증 완료")
     target_date = st.sidebar.date_input("조회 날짜", datetime.now().date())
     t_str = target_date.strftime("%Y%m%d")   
