@@ -112,7 +112,7 @@ if admin_pw == "1234":
             st.sidebar.success(f"{len(sel_f)}건 보관함 이동 완료!")
             st.rerun()
 
-    else
+    else:
         st.sidebar.warning(f"처리할 사진 없음 ({t_str})")
 
 # 4. 메인 입력 영역 (기사님용)
