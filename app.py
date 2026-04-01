@@ -130,26 +130,49 @@ for cat in categories:
 
 # 5. 전송 로직
 if st.button("🚀 모든 사진 데이터 일괄 전송"):
+    # 업로드된 파일 총 개수 계산
     total = sum([len(v["files"]) for v in data_dict.values()])
+    
     if not driver or not car:
-        st.error("⚠️ 성함과 차량번호를 입력해 주세요.")
+        st.error("⚠️ 기사님 성함과 차량번호를 먼저 입력해 주세요.")
     elif total == 0:
-        st.warning("⚠️ 사진을 선택해 주세요.")
+        st.warning("⚠️ 전송할 사진이 없습니다. 사진을 먼저 선택해 주세요.")
     else:
-        car4 = car.replace(" ", "")[-4:]
-        d_pre = rep_date.strftime("%Y%m%d")
+        # 납품번호 누락 체크 (에러가 하나라도 있으면 중단)
+        missing_no = False
         for cat_name, val in data_dict.items():
             if len(val["files"]) > 0 and not val["no"]:
-                st.error(f"❌ {cat_name}의 납품번호가 누락되었습니다.")
-                continue
-            for i, f in enumerate(val["files"]):
-                ext = os.path.splitext(f.name)[1]
-                if "①" in cat_name: fn = f"①_{val['no']}_{car4}_{i+1}{ext}"
-                elif "②" in cat_name: fn = f"②_{val['no']}_{car4}_{i+1}{ext}"
-                elif "③" in cat_name: fn = f"③_{d_pre}_{val['no']}_{car4}_{i+1}{ext}"
-                else: fn = f"④_{val['no']}_{car4}_{i+1}{ext}"
-                with open(os.path.join(SAVE_DIR, fn), "wb") as save_f:
-                    save_f.write(f.getbuffer())
-        st.success("🎊 전송 완료!")
-        st.balloons()
-        st.rerun()
+                st.error(f"❌ '{cat_name}'의 납품번호가 누락되었습니다. 번호를 입력해 주세요.")
+                missing_no = True
+        
+        if not missing_no:
+            with st.spinner("📦 사진 데이터를 안전하게 전송 중입니다..."):
+                car4 = car.replace(" ", "")[-4:]
+                d_pre = rep_date.strftime("%Y%m%d")
+                
+                # 파일 저장 실행
+                for cat_name, val in data_dict.items():
+                    for i, f in enumerate(val["files"]):
+                        ext = os.path.splitext(f.name)[1]
+                        # 파일명 규칙 적용
+                        if "①" in cat_name: fn = f"①_{val['no']}_{car4}_{i+1}{ext}"
+                        elif "②" in cat_name: fn = f"②_{val['no']}_{car4}_{i+1}{ext}"
+                        elif "③" in cat_name: fn = f"③_{d_pre}_{val['no']}_{car4}_{i+1}{ext}"
+                        else: fn = f"④_{val['no']}_{car4}_{i+1}{ext}"
+                        
+                        # 서버 폴더에 저장
+                        with open(os.path.join(SAVE_DIR, fn), "wb") as save_f:
+                            save_f.write(f.getbuffer())
+
+                # --- 시각화 강화 및 완료 처리 ---
+                st.balloons() # 풍선 효과
+                st.snow()     # 눈 내리는 효과 추가
+                
+                # 큰 성공 메시지 팝업
+                st.success(f"✅ {driver} 기사님, 모든 데이터가 정상적으로 전송되었습니다!")
+                st.info("💡 전송이 끝났습니다. 이제 창을 닫으시거나 다음 작업을 진행하세요.")
+                
+                # 중요: 전송 완료 후 기사님이 또 누르지 않도록 입력폼을 초기화하려는 경우 
+                # st.rerun()을 바로 쓰면 메시지가 순식간에 사라지므로, 
+                # 기사님이 완료 메시지를 충분히 볼 수 있게 5초 후 리프레시하거나 
+                # 버튼을 다시 누르기 전까지 상태를 유지하는 것이 좋습니다.
