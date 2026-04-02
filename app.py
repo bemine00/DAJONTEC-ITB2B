@@ -172,7 +172,7 @@ if st.button("🚀 모든 사진 데이터 일괄 전송"):
 
                     # --- 2. 네이버 메일 발송 로직 ---
                     naver_user = "djtb2b2141" # @naver.com 제외 아이디만
-                    naver_pw = "X6MRKH4Z1VS4" # 띄어쓰기 없이 입력
+                    naver_pw = "ZJH3FGZKFWL3" # 띄어쓰기 없이 입력
                     
                     msg = MIMEMultipart()
                     msg['Subject'] = f"[ITB2B] {driver}_{car}_{rep_date.strftime('%m%d')} 전송완료"
@@ -197,7 +197,6 @@ if st.button("🚀 모든 사진 데이터 일괄 전송"):
 
                     # --- 3. 완료 알림 ---
                     st.balloons()
-                    st.snow()
                     st.success(f"✅ {driver} 기사님, 전송 완료되었습니다! (메일 백업 성공)")
                     st.info("💡 사진은 관리자 페이지와 네이버 메일함에 모두 안전하게 보관됩니다.")
 
