@@ -40,8 +40,14 @@ st.markdown("""
         background-color: #0056b3; color: white; font-weight: bold; font-size: 1.1em;
         border: none; box-shadow: 0 4px 10px rgba(0,86,179,0.3);
     }
-    div[data-testid="stSidebar"] .stButton>button {
-        background-color: #d9534f; height: 3em; font-size: 0.9em;
+    /* 카테고리 헤더 스타일 */
+    .cat-header {
+        background-color: #e9ecef;
+        padding: 10px;
+        border-radius: 8px;
+        font-weight: bold;
+        margin-top: 20px;
+        border-left: 5px solid #003399;
     }
     </style> 
     <div class="header-container">
@@ -89,7 +95,7 @@ if admin_pw == "1234":
     else:
         st.sidebar.warning(f"처리할 사진 없음 ({t_str})")
 
-# 4. 메인 입력 영역 (자동 저장 링크 기능 포함)
+# 4. 메인 입력 영역
 query_params = st.query_params
 saved_driver = query_params.get("d", "")
 saved_car = query_params.get("c", "")
@@ -112,61 +118,68 @@ with st.container():
 
 st.divider()
 
-# --- 다중 납품 건 입력 섹션 ---
-if "delivery_rows" not in st.session_state:
-    st.session_state.delivery_rows = [{"cat": "①IPTV 설치사진", "no": "", "files": []}]
+# --- [개선] 카테고리 전체 펼침형 입력 로직 ---
+cat_list = ["①IPTV 설치사진", "②폐가전 입고사진", "③다수량 설치사진", "④현장 기타"]
 
-def add_row():
-    st.session_state.delivery_rows.append({"cat": "①IPTV 설치사진", "no": "", "files": []})
+# 상태 관리 초기화
+if "multi_rows" not in st.session_state:
+    # 각 카테고리별로 기본 1개씩 입력칸 생성
+    st.session_state.multi_rows = {cat: [{"no": "", "files": []}] for cat in cat_list}
 
-def del_row(idx):
-    if len(st.session_state.delivery_rows) > 1:
-        st.session_state.delivery_rows.pop(idx)
+def add_entry(cat):
+    st.session_state.multi_rows[cat].append({"no": "", "files": []})
+
+def del_entry(cat, idx):
+    if len(st.session_state.multi_rows[cat]) > 1:
+        st.session_state.multi_rows[cat].pop(idx)
 
 st.subheader("📸 사진 등록")
-cat_options = ["①IPTV 설치사진", "②폐가전 입고사진", "③다수량 설치사진", "④현장 기타"]
 
-for i, row in enumerate(st.session_state.delivery_rows):
-    with st.expander(f"📦 납품 건 #{i+1} - {row['cat']}", expanded=True):
-        col_cat, col_no = st.columns(2)
-        with col_cat:
-            row["cat"] = st.selectbox(f"카테고리 선택##{i}", cat_options, 
-                                    index=cat_options.index(row["cat"]) if row["cat"] in cat_options else 0,
-                                    key=f"cat_sel_{i}")
+# 카테고리별로 화면에 모두 표시 (Expander가 아닌 일반 영역에 나열)
+for cat in cat_list:
+    st.markdown(f'<div class="cat-header">{cat}</div>', unsafe_allow_html=True)
+    
+    for i, entry in enumerate(st.session_state.multi_rows[cat]):
+        col_no, col_file, col_del = st.columns([2, 3, 0.5])
+        
         with col_no:
-            row["no"] = st.text_input(f"납품번호 입력##{i}", value=row["no"], key=f"no_in_{i}")
-        
-        row["files"] = st.file_uploader(f"사진 선택##{i}", type=['png', 'jpg', 'jpeg'], accept_multiple_files=True, key=f"file_up_{i}")
-        
-        if len(st.session_state.delivery_rows) > 1:
-            st.button(f"🗑️ #{i+1} 건 삭제", key=f"del_btn_{i}", on_click=del_row, args=(i,))
+            entry["no"] = st.text_input(f"납품번호##{cat}_{i}", value=entry["no"], key=f"no_{cat}_{i}", placeholder="번호 입력")
+        with col_file:
+            entry["files"] = st.file_uploader(f"사진 선택##{cat}_{i}", type=['png', 'jpg', 'jpeg'], accept_multiple_files=True, key=f"file_{cat}_{i}")
+        with col_del:
+            if len(st.session_state.multi_rows[cat]) > 1:
+                if st.button("❌", key=f"del_{cat}_{i}"):
+                    del_entry(cat, i)
+                    st.rerun()
+    
+    # 각 카테고리 하단에 추가 버튼
+    st.button(f"➕ {cat} 추가 등록", key=f"add_{cat}", on_click=add_entry, args=(cat,))
 
-st.button("➕ 납품 건 추가하기", on_click=add_row)
+st.divider()
 
 # 5. 전송 로직
-if st.button("🚀 모든 납품 데이터 일괄 전송"):
-    all_data = st.session_state.delivery_rows
-    valid_count = sum(len(r["files"]) for r in all_data)
-    has_no_error = True
-
-    for r in all_data:
-        if r["files"] and not r["no"]:
-            st.error(f"❌ #{all_data.index(r)+1}번째 건의 납품번호가 없습니다.")
-            has_no_error = False
+if st.button("🚀 모든 사진 데이터 일괄 전송"):
+    rows_to_send = []
+    for cat, entries in st.session_state.multi_rows.items():
+        for entry in entries:
+            if entry["files"]:
+                if not entry["no"]:
+                    st.error(f"❌ {cat}의 납품번호가 입력되지 않았습니다.")
+                    st.stop()
+                rows_to_send.append({"cat": cat, "no": entry["no"], "files": entry["files"]})
 
     if not driver or not car:
         st.error("⚠️ 기사님 정보를 입력해 주세요.")
-    elif valid_count == 0:
-        st.warning("⚠️ 사진을 선택해 주세요.")
-    elif has_no_error:
+    elif not rows_to_send:
+        st.warning("⚠️ 전송할 사진이 없습니다.")
+    else:
         with st.spinner("📧 서버 저장 및 메일 백업 중..."):
             try:
                 car4 = car.replace(" ", "")[-4:]
                 d_pre = rep_date.strftime("%Y%m%d")
                 saved_files = []
 
-                for row in all_data:
-                    if not row["files"]: continue
+                for row in rows_to_send:
                     for idx, f in enumerate(row["files"]):
                         ext = os.path.splitext(f.name)[1]
                         if "①" in row["cat"]: fn = f"①_{row['no']}_{car4}_{idx+1}{ext}"
@@ -185,7 +198,11 @@ if st.button("🚀 모든 납품 데이터 일괄 전송"):
                 msg['Subject'] = f"[ITB2B] {driver}_{car}_{rep_date.strftime('%m%d')} 전송완료"
                 msg['From'] = f"{naver_user}@naver.com"
                 msg['To'] = f"{naver_user}@naver.com"
-                msg.attach(MIMEText(f"기사: {driver}\n차량: {car}\n건수: {len(all_data)}건"))
+                
+                body_text = f"기사님: {driver}\n차량: {car}\n날짜: {rep_date}\n\n[상세 내역]\n"
+                for r in rows_to_send:
+                    body_text += f"- {r['cat']}: {r['no']} ({len(r['files'])}장)\n"
+                msg.attach(MIMEText(body_text))
 
                 for fname, fdata in saved_files:
                     part = MIMEBase('application', 'octet-stream')
@@ -200,8 +217,9 @@ if st.button("🚀 모든 납품 데이터 일괄 전송"):
                 server.quit()
 
                 st.balloons()
-                st.success(f"✅ {len(all_data)}건 전송 완료!")
-                st.session_state.delivery_rows = [{"cat": "①IPTV 설치사진", "no": "", "files": []}]
+                st.success(f"✅ {len(saved_files)}장의 사진이 성공적으로 전송되었습니다!")
+                # 전송 후 초기화
+                st.session_state.multi_rows = {cat: [{"no": "", "files": []}] for cat in cat_list}
                 st.rerun()
             except Exception as e:
-                st.error(f"❌ 오류: {e}")
+                st.error(f"❌ 오류 발생: {e}")
