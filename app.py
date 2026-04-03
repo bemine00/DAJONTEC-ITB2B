@@ -9,6 +9,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
 from email.mime.text import MIMEText
 from email import encoders
+from email.header import Header  # 파일명 인코딩용
 
 # 1. 페이지 설정
 st.set_page_config(page_title="다존텍 ITB2B 혁신 시스템", page_icon="📦", layout="centered")
@@ -20,7 +21,7 @@ for folder in [SAVE_DIR, ARCHIVE_DIR]:
     if not os.path.exists(folder):
         os.makedirs(folder)
 
-# 2. 디자인 (CSS) - 시인성 및 버튼 최적화
+# 2. 디자인 (CSS)
 st.markdown("""
     <style>
     .main { background-color: #f8f9fa; font-family: 'Pretendard', sans-serif; }
@@ -121,7 +122,7 @@ for cat in cat_info:
 
 st.divider()
 
-# 6. [핵심 수정] 파일명 정제 및 일괄 전송
+# 6. 전송 로직 (파일명 클리닝 및 메일 첨부 오류 수정)
 if st.button("🚀 모든 사진 데이터 일괄 전송", type="primary"):
     rows_to_send = []
     for c_name, entries in st.session_state.multi_rows.items():
@@ -140,10 +141,9 @@ if st.button("🚀 모든 사진 데이터 일괄 전송", type="primary"):
                 saved_files = []
 
                 for row in rows_to_send:
-                    # [해결] 납품번호에서 숫자만 추출하여 대시(-) 제거
+                    # 번호에서 숫자만 추출 (공백, 대시 제거)
                     clean_no = "".join(filter(str.isdigit, row["no"]))
                     
-                    # [해결] 카테고리 기호 강제 부여
                     if "①" in row["cat"]: prefix = "①"
                     elif "②" in row["cat"]: prefix = "②"
                     elif "③" in row["cat"]: prefix = "③"
@@ -151,7 +151,6 @@ if st.button("🚀 모든 사진 데이터 일괄 전송", type="primary"):
 
                     for idx, f in enumerate(row["files"]):
                         ext = os.path.splitext(f.name)[1]
-                        # 파일명 규칙 재정립
                         if prefix == "③": fn = f"{prefix}_{d_pre}_{clean_no}_{car4}_{idx+1}{ext}"
                         else: fn = f"{prefix}_{clean_no}_{car4}_{idx+1}{ext}"
                         
@@ -159,7 +158,7 @@ if st.button("🚀 모든 사진 데이터 일괄 전송", type="primary"):
                         with open(os.path.join(SAVE_DIR, fn), "wb") as sf: sf.write(f_bytes)
                         saved_files.append((fn, f_bytes))
 
-                # 메일 발송 로직
+                # 메일 발송
                 naver_user, naver_pw = "djtb2b2141", "ZJH3FGZKFWL3"
                 msg = MIMEMultipart()
                 msg['Subject'] = f"[ITB2B] {driver}_{car}_{rep_date.strftime('%m%d')}"
@@ -168,10 +167,14 @@ if st.button("🚀 모든 사진 데이터 일괄 전송", type="primary"):
                 msg.attach(MIMEText(f"기사: {driver}\n차량: {car}\n일자: {rep_date}"))
 
                 for fname, fdata in saved_files:
-                    part = MIMEBase('application', 'octet-stream')
+                    # MIME 타입을 image/jpeg로 명시하여 .txt 변환 방지
+                    part = MIMEBase('image', 'jpeg') 
                     part.set_payload(fdata)
                     encoders.encode_base64(part)
-                    part.add_header('Content-Disposition', f"attachment; filename={fname.encode('utf-8').decode('iso-8859-1')}")
+                    
+                    # [핵심 수정] 파일명 한글/특수문자 깨짐 및 .txt 변환 방지 로직
+                    encoded_fname = Header(fname, 'utf-8').encode()
+                    part.add_header('Content-Disposition', 'attachment', filename=encoded_fname)
                     msg.attach(part)
 
                 server = smtplib.SMTP_SSL('smtp.naver.com', 465)
