@@ -211,7 +211,7 @@ if st.button("🚀 모든 납품 데이터 일괄 전송"):
                     server.quit()
 
                     # --- 3. 완료 알림 ---
-                   st.balloons()
+                st.balloons()
                 st.success(f"✅ 총 {len(all_data)}건의 납품 정보가 전송되었습니다!")
                 
                 # 전송 후 입력값 초기화 (선택사항)
