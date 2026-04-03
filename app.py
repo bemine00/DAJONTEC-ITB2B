@@ -102,73 +102,88 @@ if admin_pw == "1234":
         st.sidebar.markdown("---")
         st.sidebar.warning("파일 확인 후 아래 버튼을 누르면 목록에서 제외됩니다.")        
 
-        # [핵심] 완료 처리 버튼 - 파일을 ARCHIVE_DIR로 이동
-        if st.sidebar.button("✅ 선택 날짜 작업 완료 처리"):
-            for f in sel_f:
-                src = os.path.join(SAVE_DIR, f)
-                dst = os.path.join(ARCHIVE_DIR, f)
-                # 동일 이름 파일이 보관함에 있을 경우를 대비해 shutil.move 사용
-                shutil.move(src, dst)
-            st.sidebar.success(f"{len(sel_f)}건 보관함 이동 완료!")
-            st.rerun()
+# --- [수정된 섹션 설정: 다중 납품번호 대응] ---
+# 앱이 실행될 때 입력줄 상태를 기억하기 위한 설정
+if "delivery_rows" not in st.session_state:
+    st.session_state.delivery_rows = [{"cat": "①IPTV 설치사진", "no": "", "files": []}]
 
-    else:
-        st.sidebar.warning(f"처리할 사진 없음 ({t_str})")
+# 입력줄 추가 함수
+def add_row():
+    st.session_state.delivery_rows.append({"cat": "①IPTV 설치사진", "no": "", "files": []})
 
-# 4. 메인 입력 영역 (기사님용)
-with st.container():
-    c1, c2 = st.columns(2)
-    with c1: driver = st.text_input("👤 기사님 성함", placeholder="성함 입력")
-    with c2: car = st.text_input("🚛 차량 번호", placeholder="예: 12가 3456")
-    rep_date = st.date_input("📅 작업 날짜", datetime.now().date())
-st.divider()
+# 입력줄 삭제 함수
+def del_row(idx):
+    if len(st.session_state.delivery_rows) > 1:
+        st.session_state.delivery_rows.pop(idx)
 
-# 섹션 설정
-categories = [{"name": "①IPTV 설치사진", "icon": "📺"}, {"name": "②폐가전 입고사진", "icon": "♻️"}, 
-              {"name": "③다수량 설치사진", "icon": "🏢"}, {"name": "④현장 기타", "icon": "📎"}]
-data_dict = {}
-for cat in categories:
-    with st.expander(f"{cat['icon']} {cat['name']} 입력", expanded=False):
-        d_no = st.text_input(f"🔢 납품번호", key=f"n_{cat['name']}")
-        u_files = st.file_uploader(f"📷 사진 선택", type=['png', 'jpg', 'jpeg'], accept_multiple_files=True, key=f"u_{cat['name']}")
-        data_dict[cat['name']] = {"no": d_no.strip(), "files": u_files}
+st.subheader("📸 사진 등록 (다중 건수 대응)")
+st.caption("납품 건이 여러 개라면 아래 '➕ 납품건 추가' 버튼을 눌러주세요.")
 
-
-# 5. 전송 로직 (서버 저장 + 네이버 메일 백업 통합)
-if st.button("🚀 모든 사진 데이터 일괄 전송"):
-    total = sum([len(v["files"]) for v in data_dict.values()])
-    
-    if not driver or not car:
-        st.error("⚠️ 기사님 성함과 차량번호를 먼저 입력해 주세요.")
-    elif total == 0:
-        st.warning("⚠️ 전송할 사진이 없습니다. 사진을 먼저 선택해 주세요.")
-    else:
-        missing_no = False
-        for cat_name, val in data_dict.items():
-            if len(val["files"]) > 0 and not val["no"]:
-                st.error(f"❌ '{cat_name}'의 납품번호가 누락되었습니다.")
-                missing_no = True
+# 기사님이 추가한 줄 수만큼 반복해서 입력칸 생성
+for i, row in enumerate(st.session_state.delivery_rows):
+    with st.expander(f"📦 납품 건 #{i+1} ({row['cat']})", expanded=True):
+        col_cat, col_no = st.columns(2)
+        with col_cat:
+            row["cat"] = st.selectbox(f"카테고리 선택##{i}", 
+                                    ["①IPTV 설치사진", "②폐가전 입고사진", "③다수량 설치사진", "④현장 기타"],
+                                    key=f"cat_select_{i}")
+        with col_no:
+            row["no"] = st.text_input(f"납품번호 입력##{i}", value=row["no"], key=f"no_input_{i}")
         
-        if not missing_no:
-            with st.spinner("📧 사진을 서버에 저장하고 네이버 메일로 백업 중입니다..."):
-                try:
-                    car4 = car.replace(" ", "")[-4:]
-                    d_pre = rep_date.strftime("%Y%m%d")
-                    saved_files_for_email = [] # 메일 첨부용 리스트
+        row["files"] = st.file_uploader(f"사진 선택##{i}", type=['png', 'jpg', 'jpeg'], accept_multiple_files=True, key=f"file_up_{i}")
+        
+        if len(st.session_state.delivery_rows) > 1:
+            st.button(f"🗑️ 이 납품 건 삭제", key=f"del_btn_{i}", on_click=del_row, args=(i,))
 
-                    # --- 1. 서버 폴더 저장 로직 ---
-                    for cat_name, val in data_dict.items():
-                        for i, f in enumerate(val["files"]):
-                            ext = os.path.splitext(f.name)[1]
-                            if "①" in cat_name: fn = f"①_{val['no']}_{car4}_{i+1}{ext}"
-                            elif "②" in cat_name: fn = f"②_{val['no']}_{car4}_{i+1}{ext}"
-                            elif "③" in cat_name: fn = f"③_{d_pre}_{val['no']}_{car4}_{i+1}{ext}"
-                            else: fn = f"④_{val['no']}_{car4}_{i+1}{ext}"
-                            
-                            file_data = f.getvalue()
-                            with open(os.path.join(SAVE_DIR, fn), "wb") as save_f:
-                                save_f.write(file_data)
-                            saved_files_for_email.append((fn, file_data))
+# 행 추가 버튼
+st.button("➕ 납품 건(번호) 추가하기", on_click=add_row)
+
+# 전송 로직에서 사용할 데이터 딕셔너리 준비 (기존 로직과 호환을 위함)
+# 이 부분은 아래 5번 전송 로직에서 'st.session_state.delivery_rows'를 직접 사용하도록 수정할 예정입니다.
+
+
+# 5. 전송 로직 (다중 건수 통합 처리)
+if st.button("🚀 모든 납품 데이터 일괄 전송"):
+    # 유효성 검사
+    all_data = st.session_state.delivery_rows
+    has_error = False
+    valid_count = 0
+    
+    for row in all_data:
+        if row["files"]:
+            if not row["no"]:
+                st.error(f"❌ #{all_data.index(row)+1}번째 건의 납품번호가 없습니다.")
+                has_error = True
+            valid_count += len(row["files"])
+            
+    if not driver or not car:
+        st.error("⚠️ 기사님 정보를 입력해 주세요.")
+    elif valid_count == 0:
+        st.warning("⚠️ 전송할 사진이 하나도 없습니다.")
+    elif not has_error:
+        with st.spinner("📧 모든 데이터를 메일로 백경 및 서버 저장 중..."):
+            try:
+                car4 = car.replace(" ", "")[-4:]
+                d_pre = rep_date.strftime("%Y%m%d")
+                saved_files_for_email = []
+
+                # 모든 행(Row)을 돌면서 저장 및 메일 준비
+                for row in all_data:
+                    if not row["files"]: continue
+                    
+                    cat_name = row["cat"]
+                    for idx, f in enumerate(row["files"]):
+                        ext = os.path.splitext(f.name)[1]
+                        # 파일명 규칙 (기존 로직 유지)
+                        if "①" in cat_name: fn = f"①_{row['no']}_{car4}_{idx+1}{ext}"
+                        elif "②" in cat_name: fn = f"②_{row['no']}_{car4}_{idx+1}{ext}"
+                        elif "③" in cat_name: fn = f"③_{d_pre}_{row['no']}_{car4}_{idx+1}{ext}"
+                        else: fn = f"④_{row['no']}_{car4}_{idx+1}{ext}"
+                        
+                        f_bytes = f.getvalue()
+                        with open(os.path.join(SAVE_DIR, fn), "wb") as sf:
+                            sf.write(f_bytes)
+                        saved_files_for_email.append((fn, f_bytes))
 
                     # --- 2. 네이버 메일 발송 로직 ---
                     naver_user = "djtb2b2141" # @naver.com 제외 아이디만
@@ -196,9 +211,12 @@ if st.button("🚀 모든 사진 데이터 일괄 전송"):
                     server.quit()
 
                     # --- 3. 완료 알림 ---
-                    st.balloons()
-                    st.success(f"✅ {driver} 기사님, 전송 완료되었습니다! (메일 백업 성공)")
-                    st.info("💡 사진은 관리자 페이지와 네이버 메일함에 모두 안전하게 보관됩니다.")
+                   st.balloons()
+                st.success(f"✅ 총 {len(all_data)}건의 납품 정보가 전송되었습니다!")
+                
+                # 전송 후 입력값 초기화 (선택사항)
+                st.session_state.delivery_rows = [{"id": 0, "cat": "①IPTV 설치사진", "no": "", "files": []}]
+                st.rerun()
 
-                except Exception as e:
-                    st.error(f"❌ 전송 오류: {e}\n(비밀번호나 메일 설정을 확인해 주세요)")
+            except Exception as e:
+                st.error(f"❌ 전송 오류: {e}")
