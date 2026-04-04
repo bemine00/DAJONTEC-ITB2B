@@ -182,5 +182,12 @@ if st.button("🚀 모든 사진 데이터 일괄 전송", type="primary"):
                 server.send_message(msg)
                 server.quit()
 
-                st.balloons(); st.success("✅ 전송 완료!"); st.session_state.multi_rows = {c["name"]: [{"no": "", "files": []}] for c in cat_info}; st.rerun()
+             # [수정] 풍선 효과 실행 후 대기 시간 추가
+                st.balloons()
+                st.success("✅ 전송 완료! 기분 좋게 퇴근하세요!")
+                time.sleep(2) # 풍선이 올라갈 시간을 줍니다.
+                
+                # 데이터 초기화 및 새로고침
+                st.session_state.multi_rows = {c["name"]: [{"no": "", "files": []}] for c in cat_info}
+                st.rerun()
             except Exception as e: st.error(f"❌ 오류: {e}")
