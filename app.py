@@ -34,7 +34,7 @@ st.markdown("""
         text-align: center;
         color: white;
     }
-    .header-title { font-size: 22px; font-weight: 800; margin: 0; }
+    .header-title { font-size: 32px; font-weight: 800; margin: 0; }
     
     /* 카테고리별 색상 헤더 */
     .cat-header-1 { background-color: #e7f0ff; color: #004085; border-left: 6px solid #007bff; padding: 8px 12px; border-radius: 4px; font-weight: bold; margin-top: 15px; }
