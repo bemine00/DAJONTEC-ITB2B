@@ -10,7 +10,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
 from email.mime.text import MIMEText
 from email import encoders
-from email.header import Header  # 파일명 인코딩용
+from email.header import Header
 
 # 1. 페이지 설정
 st.set_page_config(page_title="다존텍 ITB2B 혁신 시스템", page_icon="📦", layout="centered")
@@ -35,15 +35,13 @@ st.markdown("""
         text-align: center;
         color: white;
     }
-    .header-title { font-size: 32px; font-weight: 800; margin: 0; }
+    .header-title { font-size: 22px; font-weight: 800; margin: 0; }
     
-    /* 카테고리별 색상 헤더 */
     .cat-header-1 { background-color: #e7f0ff; color: #004085; border-left: 6px solid #007bff; padding: 8px 12px; border-radius: 4px; font-weight: bold; margin-top: 15px; }
     .cat-header-2 { background-color: #fff3e0; color: #856404; border-left: 6px solid #ff9800; padding: 8px 12px; border-radius: 4px; font-weight: bold; margin-top: 15px; }
     .cat-header-3 { background-color: #e8f5e9; color: #1b5e20; border-left: 6px solid #4caf50; padding: 8px 12px; border-radius: 4px; font-weight: bold; margin-top: 15px; }
     .cat-header-4 { background-color: #f5f5f5; color: #424242; border-left: 6px solid #9e9e9e; padding: 8px 12px; border-radius: 4px; font-weight: bold; margin-top: 15px; }
 
-    /* 버튼 스타일 */
     .stButton>button[kind="primary"] { background-color: #0056b3; color: white; font-weight: bold; height: 3.5em; border-radius: 10px; }
     div.stButton > button:not([kind="primary"]) { height: 2.2em; font-size: 0.85em; border-radius: 8px; margin-top: -5px; }
     </style> 
@@ -52,7 +50,7 @@ st.markdown("""
     </div>
     """, unsafe_allow_html=True)
 
-# 3. 사이드바 - 관리자 메뉴
+# 3. 사이드바 - 관리자 메뉴 (삭제 기능 추가)
 st.sidebar.title("🔐 관리자 모드")
 admin_pw = st.sidebar.text_input("접속 암호", type="password")
 if admin_pw == "1234":
@@ -65,17 +63,35 @@ if admin_pw == "1234":
 
     if sel_f:
         st.sidebar.info(f"📂 미처리: {len(sel_f)}건")
+        
+        # 압축 및 다운로드
         buf = io.BytesIO()
         with zipfile.ZipFile(buf, "w") as z:
             for f in sel_f:
                 fol = "①IPTV" if "①" in f else "②폐가전" if "②" in f else "③다수량" if "③" in f else "④기타"
                 z.write(os.path.join(SAVE_DIR, f), arcname=os.path.join(fol, f.split('_', 1)[-1]))
-        st.sidebar.download_button(label=f"📥 {t_str} 자료 받기", data=buf.getvalue(), file_name=f"DAJON_{t_str}.zip")
-        if st.sidebar.button("✅ 작업 완료 (보관함 이동)"):
+        st.sidebar.download_button(label=f"📥 {t_str} 자료 받기 (Zip)", data=buf.getvalue(), file_name=f"DAJON_{t_str}.zip")
+        
+        st.sidebar.divider()
+        
+        # 정리 기능 1: 보관함으로 이동 (기존)
+        if st.sidebar.button("📦 작업 완료 (보관함 이동)"):
             for f in sel_f: shutil.move(os.path.join(SAVE_DIR, f), os.path.join(ARCHIVE_DIR, f))
+            st.sidebar.success("보관함으로 이동되었습니다.")
+            time.sleep(1)
             st.rerun()
+            
+        # 정리 기능 2: 즉시 삭제 (신규)
+        if st.sidebar.button("🗑️ 미처리 파일 즉시 삭제", help="주의: 서버에서 영구 삭제됩니다."):
+            for f in sel_f:
+                os.remove(os.path.join(SAVE_DIR, f))
+            st.sidebar.warning(f"{len(sel_f)}개의 파일이 삭제되었습니다.")
+            time.sleep(1)
+            st.rerun()
+    else:
+        st.sidebar.warning(f"처리할 사진 없음 ({t_str})")
 
-# 4. 전용 링크 로직 및 정보 입력
+# 4. 정보 입력
 q_params = st.query_params
 saved_d, saved_c = q_params.get("d", ""), q_params.get("c", "")
 
@@ -85,16 +101,7 @@ with st.container():
     with c2: car = st.text_input("🚛 차량 번호", value=saved_c)
     rep_date = st.date_input("📅 작업 날짜", datetime.now().date())
 
-    with st.expander("🔗 나만의 자동 입력 링크 만들기"):
-        if st.button("전용 링크 생성"):
-            if driver and car:
-                p_url = f"https://dajontec-itb2b.streamlit.app/?d={driver.strip()}&c={car.replace(' ', '')}"
-                st.success("이 링크를 북마크하세요!")
-                st.code(p_url)
-
-st.divider()
-
-# 5. 사진 등록 (카테고리별 색상 구분)
+# 5. 사진 등록 영역
 cat_info = [
     {"name": "①IPTV 설치사진", "class": "cat-header-1", "short": "①IPTV"},
     {"name": "②폐가전 입고사진", "class": "cat-header-2", "short": "②폐가전"},
@@ -123,7 +130,7 @@ for cat in cat_info:
 
 st.divider()
 
-# 6. 전송 로직 (파일명 클리닝 및 메일 첨부 오류 수정)
+# 6. 전송 로직
 if st.button("🚀 모든 사진 데이터 일괄 전송", type="primary"):
     rows_to_send = []
     for c_name, entries in st.session_state.multi_rows.items():
@@ -142,19 +149,11 @@ if st.button("🚀 모든 사진 데이터 일괄 전송", type="primary"):
                 saved_files = []
 
                 for row in rows_to_send:
-                    # 번호에서 숫자만 추출 (공백, 대시 제거)
                     clean_no = "".join(filter(str.isdigit, row["no"]))
-                    
-                    if "①" in row["cat"]: prefix = "①"
-                    elif "②" in row["cat"]: prefix = "②"
-                    elif "③" in row["cat"]: prefix = "③"
-                    else: prefix = "④"
-
+                    prefix = "①" if "①" in row["cat"] else "②" if "②" in row["cat"] else "③" if "③" in row["cat"] else "④"
                     for idx, f in enumerate(row["files"]):
                         ext = os.path.splitext(f.name)[1]
-                        if prefix == "③": fn = f"{prefix}_{d_pre}_{clean_no}_{car4}_{idx+1}{ext}"
-                        else: fn = f"{prefix}_{clean_no}_{car4}_{idx+1}{ext}"
-                        
+                        fn = f"{prefix}_{d_pre}_{clean_no}_{car4}_{idx+1}{ext}" if prefix == "③" else f"{prefix}_{clean_no}_{car4}_{idx+1}{ext}"
                         f_bytes = f.getvalue()
                         with open(os.path.join(SAVE_DIR, fn), "wb") as sf: sf.write(f_bytes)
                         saved_files.append((fn, f_bytes))
@@ -168,14 +167,10 @@ if st.button("🚀 모든 사진 데이터 일괄 전송", type="primary"):
                 msg.attach(MIMEText(f"기사: {driver}\n차량: {car}\n일자: {rep_date}"))
 
                 for fname, fdata in saved_files:
-                    # MIME 타입을 image/jpeg로 명시하여 .txt 변환 방지
-                    part = MIMEBase('image', 'jpeg') 
+                    part = MIMEBase('image', 'jpeg')
                     part.set_payload(fdata)
                     encoders.encode_base64(part)
-                    
-                    # [핵심 수정] 파일명 한글/특수문자 깨짐 및 .txt 변환 방지 로직
-                    encoded_fname = Header(fname, 'utf-8').encode()
-                    part.add_header('Content-Disposition', 'attachment', filename=encoded_fname)
+                    part.add_header('Content-Disposition', 'attachment', filename=Header(fname, 'utf-8').encode())
                     msg.attach(part)
 
                 server = smtplib.SMTP_SSL('smtp.naver.com', 465)
@@ -183,12 +178,9 @@ if st.button("🚀 모든 사진 데이터 일괄 전송", type="primary"):
                 server.send_message(msg)
                 server.quit()
 
-             # [수정] 풍선 효과 실행 후 대기 시간 추가
                 st.balloons()
-                st.success("✅ 전송 완료! 기분 좋게 퇴근하세요!")
-                time.sleep(2) # 풍선이 올라갈 시간을 줍니다.
-                
-                # 데이터 초기화 및 새로고침
+                st.success("✅ 전송 완료!")
+                time.sleep(2)
                 st.session_state.multi_rows = {c["name"]: [{"no": "", "files": []}] for c in cat_info}
                 st.rerun()
             except Exception as e: st.error(f"❌ 오류: {e}")
