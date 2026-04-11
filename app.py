@@ -11,6 +11,7 @@ from email.mime.base import MIMEBase
 from email.mime.text import MIMEText
 from email import encoders
 from email.header import Header
+from PIL import Image  # 이미지 압축용 라이브러리 추가
 
 # 1. 페이지 설정
 st.set_page_config(page_title="다존텍 ITB2B 혁신 시스템", page_icon="📦", layout="centered")
@@ -50,7 +51,7 @@ st.markdown("""
     </div>
     """, unsafe_allow_html=True)
 
-# 3. 사이드바 - 관리자 메뉴 (삭제 기능 추가)
+# 3. 사이드바 - 관리자 메뉴
 st.sidebar.title("🔐 관리자 모드")
 admin_pw = st.sidebar.text_input("접속 암호", type="password")
 if admin_pw == "1234":
@@ -63,8 +64,6 @@ if admin_pw == "1234":
 
     if sel_f:
         st.sidebar.info(f"📂 미처리: {len(sel_f)}건")
-        
-        # 압축 및 다운로드
         buf = io.BytesIO()
         with zipfile.ZipFile(buf, "w") as z:
             for f in sel_f:
@@ -73,23 +72,12 @@ if admin_pw == "1234":
         st.sidebar.download_button(label=f"📥 {t_str} 자료 받기 (Zip)", data=buf.getvalue(), file_name=f"DAJON_{t_str}.zip")
         
         st.sidebar.divider()
-        
-        # 정리 기능 1: 보관함으로 이동 (기존)
         if st.sidebar.button("📦 작업 완료 (보관함 이동)"):
             for f in sel_f: shutil.move(os.path.join(SAVE_DIR, f), os.path.join(ARCHIVE_DIR, f))
-            st.sidebar.success("보관함으로 이동되었습니다.")
-            time.sleep(1)
             st.rerun()
-            
-        # 정리 기능 2: 즉시 삭제 (신규)
-        if st.sidebar.button("🗑️ 미처리 파일 즉시 삭제", help="주의: 서버에서 영구 삭제됩니다."):
-            for f in sel_f:
-                os.remove(os.path.join(SAVE_DIR, f))
-            st.sidebar.warning(f"{len(sel_f)}개의 파일이 삭제되었습니다.")
-            time.sleep(1)
+        if st.sidebar.button("🗑️ 미처리 파일 즉시 삭제"):
+            for f in sel_f: os.remove(os.path.join(SAVE_DIR, f))
             st.rerun()
-    else:
-        st.sidebar.warning(f"처리할 사진 없음 ({t_str})")
 
 # 4. 정보 입력
 q_params = st.query_params
@@ -130,7 +118,7 @@ for cat in cat_info:
 
 st.divider()
 
-# 6. 전송 로직
+# 6. [해결] 전송 로직 + 이미지 압축 추가
 if st.button("🚀 모든 사진 데이터 일괄 전송", type="primary"):
     rows_to_send = []
     for c_name, entries in st.session_state.multi_rows.items():
@@ -142,7 +130,7 @@ if st.button("🚀 모든 사진 데이터 일괄 전송", type="primary"):
     if not driver or not car: st.error("⚠️ 기사님 정보를 확인해주세요.")
     elif not rows_to_send: st.warning("⚠️ 전송할 사진이 없습니다.")
     else:
-        with st.spinner("📧 전송 중..."):
+        with st.spinner("📧 이미지 최적화 및 메일 전송 중..."):
             try:
                 car4 = car.replace(" ", "")[-4:]
                 d_pre = rep_date.strftime("%Y%m%d")
@@ -151,10 +139,28 @@ if st.button("🚀 모든 사진 데이터 일괄 전송", type="primary"):
                 for row in rows_to_send:
                     clean_no = "".join(filter(str.isdigit, row["no"]))
                     prefix = "①" if "①" in row["cat"] else "②" if "②" in row["cat"] else "③" if "③" in row["cat"] else "④"
+                    
                     for idx, f in enumerate(row["files"]):
                         ext = os.path.splitext(f.name)[1]
                         fn = f"{prefix}_{d_pre}_{clean_no}_{car4}_{idx+1}{ext}" if prefix == "③" else f"{prefix}_{clean_no}_{car4}_{idx+1}{ext}"
-                        f_bytes = f.getvalue()
+                        
+                        # --- [이미지 압축 로직 추가] ---
+                        img = Image.open(f)
+                        if img.mode in ("RGBA", "P"): img = img.convert("RGB")
+                        
+                        # 해상도 조절 (가로 기준 1280px로 축소하여 용량 확보)
+                        max_size = 1280
+                        if img.width > max_size:
+                            w_percent = (max_size / float(img.width))
+                            h_size = int((float(img.height) * float(w_percent)))
+                            img = img.resize((max_size, h_size), Image.Resampling.LANCZOS)
+                        
+                        # 메모리에 압축 저장 (품질 70%)
+                        img_io = io.BytesIO()
+                        img.save(img_io, format="JPEG", quality=70, optimize=True)
+                        f_bytes = img_io.getvalue()
+                        # ----------------------------
+                        
                         with open(os.path.join(SAVE_DIR, fn), "wb") as sf: sf.write(f_bytes)
                         saved_files.append((fn, f_bytes))
 
@@ -164,7 +170,7 @@ if st.button("🚀 모든 사진 데이터 일괄 전송", type="primary"):
                 msg['Subject'] = f"[ITB2B] {driver}_{car}_{rep_date.strftime('%m%d')}"
                 msg['From'] = f"{naver_user}@naver.com"
                 msg['To'] = f"{naver_user}@naver.com"
-                msg.attach(MIMEText(f"기사: {driver}\n차량: {car}\n일자: {rep_date}"))
+                msg.attach(MIMEText(f"기사: {driver}\n차량: {car}\n일자: {rep_date}\n(이미지 최적화 전송 완료)"))
 
                 for fname, fdata in saved_files:
                     part = MIMEBase('image', 'jpeg')
@@ -178,9 +184,7 @@ if st.button("🚀 모든 사진 데이터 일괄 전송", type="primary"):
                 server.send_message(msg)
                 server.quit()
 
-                st.balloons()
-                st.success("✅ 전송 완료!")
-                time.sleep(2)
+                st.balloons(); st.success("✅ 최적화 전송 완료!"); time.sleep(2)
                 st.session_state.multi_rows = {c["name"]: [{"no": "", "files": []}] for c in cat_info}
                 st.rerun()
             except Exception as e: st.error(f"❌ 오류: {e}")
